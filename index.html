@@ -172,6 +172,7 @@ textarea{width:100%;height:120px;margin-top:10px;background:var(--card2);color:v
       <li><b>Data gak masuk-masuk:</b> sensor harus mode HR (LED biru di samping), gak lagi di-charge, dan gak ada app lain yang lagi narik PPI.</li>
       <li><b>Data lu:</b> cuma disimpen di browser ini, gak dikirim ke mana-mana. iPhone dan laptop punya riwayat sendiri-sendiri, pindahinnya pakai Bagikan/Download terus Import CSV. Rutin backup CSV, soalnya iOS bisa ngehapus data web yang lama gak dibuka.</li>
       <li><b>Cara baca:</b> RMSSD = variasi detak ke detak (standar HRV harian). SDNN = rumus yang sama kayak "HRV" di Apple Health. Bandinginnya sama angka lu sendiri di kondisi yang sama, bukan sama orang lain.</li>
+      <li><b>Ke Apple Health (iPhone):</b> bikin shortcut bernama "Catat HRV" di app Shortcuts, isinya action Log Health Sample: tipe Heart Rate Variability, nilai = Shortcut Input, satuan ms. Abis ngukur, tap tombol "Masukin ke Apple Health". Pertama kali, izinin Shortcuts nulis HRV ke Health.</li>
     </ul>
   </details>
 </main>
@@ -195,6 +196,7 @@ const NAMA_ERROR = {
 const ATURAN = { batasErrorMs: 30, ppiMin: 300, ppiMax: 2000, batasLoncat: 0.20,
                  minPasangan: 40, tungguDataPertama: 60, batasDataPutus: 15 };
 
+const NAMA_SHORTCUT = 'Catat HRV'; // nama shortcut di app Shortcuts iPhone (Log Health Sample -> HRV)
 const LABEL_PRESET = ['pagi', 'belajar', 'habis-kerja', 'tes'];
 const POSISI = ['duduk', 'baring', 'berdiri'];
 const KUNCI_LOG = 'hrv_verity_log_v1', KUNCI_PREF = 'hrv_verity_pref_v1';
@@ -576,6 +578,12 @@ function tampilHasil(s, catatan) {
         <div><span>Lama data</span><b>${fmtMmss(h.detikData)}</b></div>
         <div><span>Detak</span><b>${h.dipakai} dipakai · ${h.dibuang} dibuang (${Math.round(h.persenDibuang)}%)</b></div>
       </div>`;
+    if (diIphone) {
+      // Apple Health nyimpen HRV sebagai SDNN (ms). Dikirim bulat biar aman dari beda format desimal.
+      const ms = Math.round(h.sdnn);
+      html += `<button type="button" class="btn btn-main" data-health="${ms}">Masukin ke Apple Health</button>
+        <p class="note">Yang dikirim SDNN ${ms} ms, soalnya HRV di Apple Health pakai SDNN. Butuh shortcut "${NAMA_SHORTCUT}" di app Shortcuts. Kalau Shortcuts gak kebuka, jalanin "${NAMA_SHORTCUT}" manual terus masukin angka ${ms}.</p>`;
+    }
     if (kualitas === 'jelek') html += '<p class="note warn">Banyak detak kebuang, angkanya jangan dipercaya dulu. Ulang sambil lebih diem.</p>';
     html += '<p class="note">Bandinginnya sama angka lu sendiri di kondisi yang sama, bukan sama orang lain.</p>';
     if (!kesimpen) html += '<p class="note err">Gagal nyimpen ke riwayat (penyimpanan browser penuh atau diblokir).</p>';
@@ -586,6 +594,12 @@ function tampilHasil(s, catatan) {
   tampilKartu('hasil');
   renderRiwayat(o.label);
 }
+
+// ===== Kirim ke Apple Health lewat app Shortcuts =====
+function urlShortcut(nilai) {
+  return `shortcuts://run-shortcut?name=${encodeURIComponent(NAMA_SHORTCUT)}&input=text&text=${encodeURIComponent(String(nilai))}`;
+}
+function bukaUrl(url) { window.location.href = url; }
 
 // ===== Layar tetap nyala selama ngukur =====
 async function kunciLayar(s) {
@@ -682,6 +696,10 @@ function pasangEvent() {
   $('btnMulai').addEventListener('click', mulai);
   $('btnStop').addEventListener('click', () => { if (sesi && !sesi.selesai) akhiri(sesi, 'dihentikan'); });
   $('btnLagi').addEventListener('click', () => { tampilKartu('setel'); setPesan('pesanSetel', ''); });
+  $('hIsi').addEventListener('click', e => {
+    const b = e.target.closest('[data-health]'); if (!b) return;
+    bukaUrl(urlShortcut(b.dataset.health));
+  });
   $('btnRaw').addEventListener('click', async () => {
     if (!sesiTerakhir || !sesiTerakhir.pengolah.detak.length) return;
     const d = sesiTerakhir.mulai;
