@@ -1,0 +1,103 @@
+# Build app iOS "HRV Seharian" di Mac punya GitHub (gratis buat repo public),
+# hasilnya file .ipa yang ditaruh di halaman Releases buat dipasang lewat Impactor/Sideloadly.
+name: Build app iOS
+
+on:
+  push:
+    branches: [main, ios-app]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-ios
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versi Xcode
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Tes logika HRV
+        working-directory: ios/HRVCore
+        run: swift test
+
+      - name: Pasang XcodeGen
+        run: brew install xcodegen
+
+      - name: Bikin project Xcode
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Cache paket Swift
+        uses: actions/cache@v4
+        with:
+          path: ios/build/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('ios/project.yml') }}
+
+      - name: Build (tanpa tanda tangan)
+        working-directory: ios
+        run: |
+          set +e
+          xcodebuild -project HRVSeharian.xcodeproj -scheme HRVSeharian -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1
+          status=$?
+          grep -E "error:|\*\* BUILD|warning: .*/ios/HRVSeharian/" build.log | head -150
+          if [ $status -ne 0 ]; then tail -60 build.log; fi
+          exit $status
+
+      - name: Bungkus jadi .ipa
+        run: |
+          APP="ios/build/Build/Products/Release-iphoneos/HRVSeharian.app"
+          test -d "$APP"
+          rm -rf out && mkdir -p out/Payload
+          cp -R "$APP" out/Payload/
+          APP_OUT="out/Payload/HRVSeharian.app"
+          # Tanda tangan ad-hoc buat kode di dalam app (kalau ada), nanti installer nandatanganin ulang.
+          find "$APP_OUT" -depth \( -name "*.framework" -o -name "*.dylib" -o -name "*.appex" \) -print0 |
+            while IFS= read -r -d '' f; do codesign --force --sign - --timestamp=none "$f"; done
+          # Versi cadangan tanpa izin HealthKit (kalau installer nolak HealthKit).
+          codesign --force --sign - --timestamp=none "$APP_OUT"
+          (cd out && zip -qry ../HRVSeharian-tanpa-Health.ipa Payload)
+          # Versi utama: izin HealthKit ditempel ke app, biar Impactor ngaktifin HealthKit di Apple ID lu.
+          codesign --force --sign - --timestamp=none --entitlements ios/HRVSeharian/HRVSeharian.entitlements "$APP_OUT"
+          codesign -d --entitlements - "$APP_OUT"
+          plutil -p "$APP_OUT/Info.plist" | head -40
+          (cd out && zip -qry ../HRVSeharian.ipa Payload)
+          ls -la *.ipa
+
+      - name: Simpan hasil build
+        uses: actions/upload-artifact@v4
+        with:
+          name: HRVSeharian-ipa
+          path: "*.ipa"
+
+      - name: Taruh di Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ios-terbaru --yes --cleanup-tag 2>/dev/null || true
+          gh release create ios-terbaru HRVSeharian.ipa HRVSeharian-tanpa-Health.ipa \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "HRV Seharian (iOS) - build terbaru" \
+            --notes "Build otomatis dari commit ${GITHUB_SHA::7} (branch ${GITHUB_REF_NAME}).
+
+          - HRVSeharian.ipa: versi utama, bisa nulis langsung ke Apple Health. Pasang pakai Impactor.
+          - HRVSeharian-tanpa-Health.ipa: cadangan kalau installer nolak izin HealthKit. Kirim ke Apple Health lewat Shortcuts."

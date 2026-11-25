@@ -1,0 +1,61 @@
+# Project Xcode dibikin otomatis dari file ini pakai XcodeGen (di GitHub Actions),
+# jadi gak perlu Mac buat ngedit project-nya.
+name: HRVSeharian
+options:
+  bundleIdPrefix: com.zayyan353
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+packages:
+  PolarBleSdk:
+    url: https://github.com/polarofficial/polar-ble-sdk.git
+    exactVersion: 8.6.0
+  HRVCore:
+    path: HRVCore
+targets:
+  HRVSeharian:
+    type: application
+    platform: iOS
+    sources:
+      - path: HRVSeharian
+    dependencies:
+      - package: PolarBleSdk
+      - package: HRVCore
+    info:
+      path: HRVSeharian/Info.plist
+      properties:
+        CFBundleDisplayName: HRV Seharian
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSBluetoothAlwaysUsageDescription: Buat nyambung ke Polar Verity Sense dan narik rekaman detak jantung.
+        NSHealthShareUsageDescription: Buat ngecek izin Apple Health.
+        NSHealthUpdateUsageDescription: Buat nyimpen HRV dari Polar Verity Sense ke Apple Health.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        LSApplicationQueriesSchemes:
+          - shortcuts
+    entitlements:
+      path: HRVSeharian/HRVSeharian.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zayyan353.hrvseharian
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: HRVSeharian/Info.plist
+schemes:
+  HRVSeharian:
+    build:
+      targets:
+        HRVSeharian: all

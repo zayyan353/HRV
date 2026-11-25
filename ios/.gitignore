@@ -1,0 +1,6 @@
+build/
+HRVSeharian.xcodeproj/
+HRVSeharian/Info.plist
+HRVSeharian/HRVSeharian.entitlements
+HRVCore/.build/
+*.ipa
